@@ -3,292 +3,304 @@ import { useState, useEffect, useCallback } from 'react'
 // 引入樣式檔案
 import './App.css'
 
+// 音效檔案
+/*const AUDIO = {
+  HIT: new Audio('/sounds/hit.mp3'),
+  MISS: new Audio('/sounds/miss.mp3'),
+  GAME_START: new Audio('/sounds/game-start.mp3'),
+  GAME_OVER: new Audio('/sounds/game-over.mp3'),
+  LEVEL_UP: new Audio('/sounds/level-up.mp3'),
+};*/
+
+// 地鼠類型定義
+const MOLE_TYPES = {
+  NORMAL: 'normal',
+  GOLDEN: 'golden',
+  BOMB: 'bomb'
+};
+
+// 地鼠分數設定
+const MOLE_SCORES = {
+  NORMAL: 1,    // 普通地鼠 1分
+  GOLDEN: 5,    // 金色地鼠 5分
+  BOMB: -3     // 炸彈地鼠 -3分
+};
+
+// 地鼠出現機率設定
+const MOLE_CHANCES = {
+  GOLDEN: 0.15,   // 15% 機率出現金色地鼠
+  BOMB: 0.1      // 10% 機率出現炸彈地鼠
+};
+
+// 難度設置
+const DIFFICULTY_SETTINGS = {
+  EASY: {
+    name: '簡單',
+    moleSpeed: 1000,
+    timeBonus: 5,
+    goldenChance: 0.1,
+    bombChance: 0.05
+  },
+  NORMAL: {
+    name: '中等',
+    moleSpeed: 800,
+    timeBonus: 0,
+    goldenChance: 0.15,
+    bombChance: 0.1
+  },
+  HARD: {
+    name: '困難',
+    moleSpeed: 600,
+    timeBonus: -5,
+    goldenChance: 0.2,
+    bombChance: 0.15
+  }
+};
+
 // App 主元件
 function App() {
-  // 遊戲狀態相關的 state
-  const [score, setScore] = useState(0)  // 當前分數
-  const [timeLeft, setTimeLeft] = useState(15)  // 剩餘時間
-  const [round, setRound] = useState(1)  // 當前輪次
-  const [isResting, setIsResting] = useState(false)  // 是否在休息時間
-  const [restTime, setRestTime] = useState(5)  // 休息時間倒數
-  const [activeMole, setActiveMole] = useState(null)  // 當前出現的地鼠位置
-  const [showRoundScore, setShowRoundScore] = useState(false)  // 是否顯示該輪分數
-  const [isFadingOut, setIsFadingOut] = useState(false)  // 是否正在淡出
-  const [gameOver, setGameOver] = useState(false)  // 遊戲是否結束
-  const [wrongHit, setWrongHit] = useState(null)  // 錯誤點擊的位置
-  const [roundScores, setRoundScores] = useState([0, 0, 0])  // 記錄每輪得分
-  const [gameStarted, setGameStarted] = useState(false)  // 遊戲是否開始
-  const [startTime, setStartTime] = useState(null)  // 遊戲開始時間
+  const [score, setScore] = useState(0)
+  const [timeLeft, setTimeLeft] = useState(15)
+  const [gameStarted, setGameStarted] = useState(false)
+  const [activeMole, setActiveMole] = useState(null)
+  const [activeMoleType, setActiveMoleType] = useState(null)
+  const [isGameOver, setIsGameOver] = useState(false)
+  const [finalScore, setFinalScore] = useState(0)
+  const [showFinalScore, setShowFinalScore] = useState(false)
+  const [round, setRound] = useState(1)
+  const [isResting, setIsResting] = useState(false)
+  const [wrongHit, setWrongHit] = useState(null)
+  const [missedMole, setMissedMole] = useState(null)
 
-  // 根據輪次決定地鼠出現的速度（毫秒）
+  // 地鼠類型及其分數
+  const moleTypes = {
+    normal: { score: 1, probability: 0.7 },
+    golden: { score: 5, probability: 0.2 },
+    bomb: { score: -3, probability: 0.1 }
+  }
+
+  // 根據回合取得地鼠出現速度
   const getMoleSpeed = () => {
     switch (round) {
-      case 1: return 800   // 第一輪：較慢
-      case 2: return 700   // 第二輪：中等
-      case 3: return 600   // 第三輪：較快
-      default: return 800
+      case 1: return 2000;  // 第一輪：2秒
+      case 2: return 1500;  // 第二輪：1.5秒
+      case 3: return 1000;  // 第三輪：1秒
+      default: return 2000;
     }
   }
 
-  // 獲取當前輪次的初始時間
-  const getInitialTime = (roundNumber) => {
-    switch (roundNumber) {
-      case 1: return 15;  // 第一輪 15 秒
-      case 2: return 15;  // 第二輪 15 秒
-      case 3: return 15;  // 第三輪 10 秒
-      default: return 15;
-    }
-  };
+  // 隨機選擇地鼠類型
+  const getRandomMoleType = () => {
+    const rand = Math.random()
+    if (rand < moleTypes.normal.probability) return 'normal'
+    if (rand < moleTypes.normal.probability + moleTypes.golden.probability) return 'golden'
+    return 'bomb'
+  }
 
-  // 休息時間計時器
-  useEffect(() => {
-    let restTimer;
-    if (isResting) {
-      if (restTime === 0) {
-        setIsFadingOut(true);
-        setTimeout(() => {
-          const nextRound = round + 1;
-          // 先儲存當前輪次得分
-          setRoundScores(prev => {
-            const newScores = [...prev];
-            newScores[round - 1] = score;
-            return newScores;
-          });
-          
-          // 重置所有狀態
-          setStartTime(null);  // 先重置開始時間
-          setIsResting(false);
-          setShowRoundScore(false);
-          setIsFadingOut(false);
-          setScore(0);
-          setRound(nextRound);
-          
-          // 使用 getInitialTime 設置新的時間
-          setTimeLeft(getInitialTime(nextRound));
-          
-          // 延遲一下再設置新的開始時間，確保時間已經被正確設置
+  // 隨機選擇洞穴
+  const getRandomHole = () => {
+    const holes = Array.from({ length: 9 }, (_, i) => i)
+    return holes[Math.floor(Math.random() * holes.length)]
+  }
+
+  // 顯示地鼠
+  const showMole = useCallback(() => {
+    if (!gameStarted || isGameOver || isResting) return
+    const newHole = getRandomHole()
+    const newType = getRandomMoleType()
+    setActiveMole(newHole)
+    setActiveMoleType(newType)
+
+    // 根據地鼠類型設置不同的消失時間
+    const timeout = newType === 'golden' ? getMoleSpeed() * 0.7 : getMoleSpeed()
+    setTimeout(() => {
+      if (activeMole === newHole) {
+        // 只有普通地鼠和金色地鼠沒打中時才扣分和顯示叉叉
+        if (activeMoleType !== 'bomb') {
+          setScore(prev => prev - 1)
+          setMissedMole(newHole)
+          // 1秒後清除叉叉
           setTimeout(() => {
-            setStartTime(Date.now());
-          }, 0);
-        }, 1000);
-        return;
+            setMissedMole(null)
+          }, 1000)
+        }
+        setActiveMole(null)
+        setActiveMoleType(null)
       }
+    }, timeout)
+  }, [gameStarted, isGameOver, isResting, activeMole, activeMoleType])
 
-      restTimer = setTimeout(() => {
-        setRestTime(prev => prev - 1);
-      }, 1000);
-    }
-    return () => {
-      if (restTimer) {
-        clearTimeout(restTimer);
-      }
-    };
-  }, [isResting, restTime, round, score]);
+  // 開始遊戲
+  const startGame = () => {
+    setScore(0)
+    setTimeLeft(15)
+    setGameStarted(true)
+    setIsGameOver(false)
+    setActiveMole(null)
+    setActiveMoleType(null)
+    setRound(1)
+    setIsResting(false)
+    setFinalScore(0)
+    setShowFinalScore(false)
+  }
 
   // 遊戲計時器
   useEffect(() => {
-    let animationFrameId;
-    
-    const updateTimer = () => {
-      if (gameStarted && !isResting && !gameOver && startTime) {
-        const now = Date.now();
-        const elapsed = Math.floor((now - startTime) / 1000);
-        const initialTime = getInitialTime(round);  // 使用 getInitialTime
-        const newTimeLeft = Math.max(initialTime - elapsed, 0);
-        
-        setTimeLeft(newTimeLeft);
-        
-        if (newTimeLeft === 0) {
-          if (round === 3) {
-            setRoundScores(prev => {
-              const newScores = [...prev];
-              newScores[2] = score;
-              return newScores;
-            });
-            setGameOver(true);
-          } else {
+    if (!gameStarted || isGameOver || isResting) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft(prevTime => {
+        const newTime = prevTime - 1;
+        if (newTime <= 0) {
+          clearInterval(timer);
+          if (round < 3) {
             setIsResting(true);
-            setShowRoundScore(true);
-            setRestTime(5);
+            setTimeout(() => {
+              setRound(prevRound => prevRound + 1);
+              setTimeLeft(15);
+              setIsResting(false);
+            }, 3000);
+          } else {
+            setIsGameOver(true);
+            setGameStarted(false);
+            setFinalScore(score);
+            setShowFinalScore(true);
           }
-          return;
+          return 0;
         }
-        
-        animationFrameId = requestAnimationFrame(updateTimer);
-      }
-    };
+        return newTime;
+      });
+    }, 1000);
 
-    if (gameStarted && !isResting && !gameOver) {
-      if (!startTime) {
-        setTimeLeft(getInitialTime(round));  // 使用 getInitialTime
-        setStartTime(Date.now());
-      } else {
-        animationFrameId = requestAnimationFrame(updateTimer);
-      }
-    }
+    return () => clearInterval(timer);
+  }, [gameStarted, isGameOver, round, isResting]);
 
-    return () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-    };
-  }, [gameStarted, isResting, gameOver, startTime, round, score]);
-
-  // 地鼠出現邏輯 Effect
-  useEffect(() => {
-    let moleTimer;
-    if (gameStarted && !isResting && timeLeft > 0 && !gameOver) {
-      if (activeMole === null && wrongHit === null) {
-        // 隨機延遲 0.3-0.8 秒後出現新地鼠
-        const randomDelay = Math.random() * 500 + 300;
-        moleTimer = setTimeout(() => {
-          setActiveMole(Math.floor(Math.random() * 9));
-        }, randomDelay);
-      } else if (activeMole !== null) {
-        // 地鼠顯示時間根據當前關卡速度決定
-        moleTimer = setTimeout(() => {
-          setActiveMole(null);
-        }, getMoleSpeed());
-      }
-    }
-    return () => {
-      if (moleTimer) {
-        clearTimeout(moleTimer);
-      }
-    };
-  }, [isResting, timeLeft, activeMole, gameOver, wrongHit, gameStarted, round]);
-
-  // 點擊地鼠的處理函數
+  // 點擊地鼠
   const handleMoleClick = (index) => {
-    if (gameOver || !gameStarted) return;  // 添加 !gameStarted 條件
-    
+    if (!gameStarted || isGameOver || isResting) {
+      return;
+    }
+
     if (index === activeMole) {
-      setScore(prev => prev + 1);
-      setActiveMole(null);  // 清除當前地鼠，觸發新的地鼠生成
-      setWrongHit(null);  // 清除之前的錯誤標記
-    } else {
-      // 打錯一律扣分
-      setScore(prev => Math.max(0, prev - 1));
-      setWrongHit(index);  // 設置打錯的位置
-      
-      // 先讓當前地鼠消失
+      const moleScore = moleTypes[activeMoleType].score;
+      setScore(prevScore => {
+        const newScore = prevScore + moleScore;
+        return Math.max(0, newScore); // 確保分數不會小於0
+      });
       setActiveMole(null);
-      
-      // 顯示叉叉一段時間後，清除叉叉並生成新地鼠
-      setTimeout(() => {
-        setWrongHit(null);
-        // 生成新的地鼠位置，確保和當前位置不同
-        let newPosition;
-        do {
-          newPosition = Math.floor(Math.random() * 9);
-        } while (newPosition === index);  // 確保新位置不會和打錯的位置相同
-        setActiveMole(newPosition);
-      }, 500);
+      setActiveMoleType(null);
+    } else {
+      setWrongHit(index);
+      setTimeout(() => setWrongHit(null), 1000);
+      // 點錯時扣1分
+      setScore(prevScore => Math.max(0, prevScore - 1));
     }
   };
 
-  // 重新開始遊戲的處理函數
-  const handleRestart = () => {
-    setScore(0);
-    setTimeLeft(getInitialTime(1));  // 使用 getInitialTime 函數
-    setRound(1);
-    setIsResting(false);
-    setRestTime(5);
-    setActiveMole(null);
-    setShowRoundScore(false);
-    setIsFadingOut(false);
-    setGameOver(false);
-    setWrongHit(null);
-    setRoundScores([0, 0, 0]);
-    setGameStarted(false);
-    setStartTime(null);
-  };
+  // 地鼠出現邏輯
+  useEffect(() => {
+    if (!gameStarted || isGameOver || isResting) {
+      return;
+    }
 
-  // 開始遊戲的處理函數
-  const handleStartGame = () => {
-    setGameStarted(true);
-    setTimeLeft(getInitialTime(1));  // 使用 getInitialTime 函數
-    setStartTime(Date.now());
-  };
+    const moleTimer = setInterval(() => {
+      const newHole = getRandomHole();
+      const newType = getRandomMoleType();
+      
+      // 如果有之前的地鼠沒打到（不是炸彈），扣分
+      if (activeMole !== null && activeMoleType !== 'bomb') {
+        setScore(prevScore => Math.max(0, prevScore - 1));
+        setMissedMole(activeMole);
+        setTimeout(() => setMissedMole(null), 1000);
+      }
+      
+      setActiveMole(newHole);
+      setActiveMoleType(newType);
+    }, getMoleSpeed());
 
-  // 計算總分
-  const totalScore = roundScores.reduce((sum, score) => sum + score, 0);
+    return () => clearInterval(moleTimer);
+  }, [gameStarted, isGameOver, isResting, round]);
 
-  // 渲染遊戲介面
   return (
     <div className="game-container">
-      {!gameStarted ? (
-        // 開始畫面
+      {!gameStarted && !isGameOver ? (
         <div className="start-screen">
           <h1>打地鼠遊戲</h1>
-          <p>準備好開始遊戲了嗎？</p>
-          <button onClick={handleStartGame} className="start-button">
-            開始遊戲
-          </button>
+          <div className="game-rules">
+            <h2>遊戲規則</h2>
+            <div className="mole-types">
+              <div className="mole-type">
+                <div className="mole-preview normal"></div>
+                <p>普通地鼠</p>
+                <p className="score">+1 分</p>
+              </div>
+              <div className="mole-type">
+                <div className="mole-preview golden"></div>
+                <p>金色地鼠</p>
+                <p className="score">+5 分</p>
+              </div>
+              <div className="mole-type">
+                <div className="mole-preview bomb"></div>
+                <p>炸彈地鼠</p>
+                <p className="score">-3 分</p>
+              </div>
+            </div>
+            <div className="rule-details">
+              <p>遊戲時間：每輪 15 秒，共三輪</p>
+              <p>目標：打中越多地鼠獲得越高分數</p>
+              <p>注意：</p>
+              <p>- 避開炸彈地鼠，否則會扣 3 分</p>
+              <p>- 沒打中地鼠會扣 1 分</p>
+              <p>- 每輪地鼠出現速度會越來越快</p>
+            </div>
+          </div>
+          <button className="start-button" onClick={startGame}>開始遊戲</button>
         </div>
       ) : (
         <>
-          {/* 遊戲資訊顯示區 */}
           <div className="game-info">
-            <p>第 {round} 輪</p>
-            <p>分數: {score}</p>
-            <p>時間: {timeLeft}秒</p>
+            <div className="info-item">第 {round} 輪</div>
+            <div className="info-item">分數: {score}</div>
+            <div className="info-item">時間: {timeLeft}秒</div>
           </div>
-
-          {/* 地鼠網格 */}
           <div className="mole-grid">
-            {Array(9).fill(null).map((_, index) => (
-              <div 
-                key={index}
-                className={`mole-hole ${activeMole === index ? 'active' : ''} ${wrongHit === index ? 'wrong' : ''}`}
-                onClick={() => handleMoleClick(index)}
+            {Array.from({ length: 9 }, (_, i) => (
+              <div
+                key={i}
+                className={`mole-hole ${activeMole === i ? 'active' : ''} ${
+                  activeMole === i ? activeMoleType : ''
+                } ${wrongHit === i ? 'wrong' : ''} ${missedMole === i ? 'missed' : ''}`}
+                onClick={() => handleMoleClick(i)}
               >
-                <div className="mole" />
-                {wrongHit === index && <div className="wrong-mark" />}
+                {activeMole === i && <div className="mole"></div>}
+                {(wrongHit === i || missedMole === i) && (
+                  <div className={`wrong-mark ${wrongHit === i ? 'wrong' : 'missed'}`}>✕</div>
+                )}
               </div>
             ))}
           </div>
-
-          {/* 休息時間或遊戲結束的遮罩層 */}
-          {(isResting || gameOver) && (
-            <div className={`rest-overlay ${isFadingOut && !gameOver ? 'fade-out' : ''}`}>
-              <div className="rest-content">
-                {gameOver ? (
-                  // 遊戲結束畫面
-                  <div className="game-over">
-                    <h2>遊戲結束！</h2>
-                    <p>恭喜完成所有關卡！</p>
-                    <div className="score-summary">
-                      <p>第一輪得分：{roundScores[0]} 分</p>
-                      <p>第二輪得分：{roundScores[1]} 分</p>
-                      <p>第三輪得分：{roundScores[2]} 分</p>
-                      <p className="final-score">總得分：{totalScore} 分</p>
-                    </div>
-                    <button onClick={handleRestart} className="restart-button">
-                      重新開始
-                    </button>
-                  </div>
-                ) : (
-                  // 休息時間畫面
-                  <>
-                    <h3>第 {round} 輪結束！</h3>
-                    <p className="round-score">得分：{score} 分</p>
-                    <div className="rest-timer">
-                      <div className="timer-circle">
-                        <span className="timer-number" key={restTime}>
-                          {restTime}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="next-round-text">
-                      {restTime === 0 ? '開始！' : `準備開始第 ${round + 1} 輪`}
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
         </>
+      )}
+      {isResting && (
+        <div className="rest-overlay">
+          <div className="rest-content">
+            <h2>第 {round} 輪結束！</h2>
+            <p>目前分數：{score}</p>
+            <p>準備開始第 {round + 1} 輪...</p>
+            <p className="speed-note">注意：地鼠會更快了！</p>
+          </div>
+        </div>
+      )}
+      {showFinalScore && (
+        <div className="game-over">
+          <h2>遊戲結束！</h2>
+          <div className="final-score-container">
+            <p className="final-score">{finalScore}</p>
+            <p className="score-label">總分</p>
+          </div>
+        </div>
       )}
     </div>
   )
