@@ -71,6 +71,7 @@ function App() {
   const [isResting, setIsResting] = useState(false)
   const [wrongHit, setWrongHit] = useState(null)
   const [missedMole, setMissedMole] = useState(null)
+  const [isDarkMode, setIsDarkMode] = useState(false)  // 新增主題狀態
 
   // 地鼠類型及其分數
   const moleTypes = {
@@ -155,7 +156,7 @@ function App() {
         const newTime = prevTime - 1;
         if (newTime <= 0) {
           clearInterval(timer);
-          if (round < 3) {
+          if (round < 2) {  // 修改為2回合
             setIsResting(true);
             setTimeout(() => {
               setRound(prevRound => prevRound + 1);
@@ -223,10 +224,42 @@ function App() {
     return () => clearInterval(moleTimer);
   }, [gameStarted, isGameOver, isResting, round]);
 
+  // 切換主題
+  const toggleTheme = () => {
+    setIsDarkMode(prev => {
+      const newTheme = !prev;
+      document.body.className = newTheme ? 'bg-gray-800' : 'bg-gray-50';
+      return newTheme;
+    });
+  };
+
+  // 初始化主題
+  useEffect(() => {
+    document.body.className = isDarkMode ? 'bg-gray-800' : 'bg-gray-50';
+  }, []);
+
+  // 返回開始畫面
+  const returnToStart = () => {
+    setGameStarted(false);
+    setIsGameOver(false);
+    setShowFinalScore(false);
+    setScore(0);
+    setTimeLeft(15);
+    setRound(1);
+    setActiveMole(null);
+    setActiveMoleType(null);
+  };
+
   return (
-    <div className="game-container">
+    <div className={`game-container ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+      <button 
+        className={`theme-toggle ${isDarkMode ? 'dark' : 'light'}`}
+        onClick={toggleTheme}
+      >
+        {isDarkMode ? '☀️' : '🌙'}
+      </button>
       {!gameStarted && !isGameOver ? (
-        <div className="start-screen">
+        <div className={`start-screen ${isDarkMode ? 'dark' : 'light'}`}>
           <h1>打地鼠遊戲</h1>
           <div className="game-rules">
             <h2>遊戲規則</h2>
@@ -297,9 +330,15 @@ function App() {
         <div className="game-over">
           <h2>遊戲結束！</h2>
           <div className="final-score-container">
+            <p className="score-label">最終得分</p>
             <p className="final-score">{finalScore}</p>
-            <p className="score-label">總分</p>
           </div>
+          <button className="restart-button" onClick={startGame}>
+            再玩一次
+          </button>
+          <button className="menu-button" onClick={returnToStart}>
+            返回開始畫面
+          </button>
         </div>
       )}
     </div>
