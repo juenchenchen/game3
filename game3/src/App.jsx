@@ -11,7 +11,7 @@ import './App.css'
   GAME_OVER: new Audio('/sounds/game-over.mp3'),
   LEVEL_UP: new Audio('/sounds/level-up.mp3'),
 };*/
-
+//
 // 地鼠類型定義
 const MOLE_TYPES = {
   NORMAL: 'normal',
