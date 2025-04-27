@@ -29,7 +29,7 @@ const MOLE_SCORES = {
 // 地鼠出現機率設定
 const MOLE_CHANCES = {
   GOLDEN: 0.15,   // 15% 機率出現金色地鼠
-  BOMB: 0.1      // 10% 機率出現炸彈地鼠
+  BOMB: 0.3      // 30% 機率出現炸彈地鼠
 };
 
 // 難度設置
